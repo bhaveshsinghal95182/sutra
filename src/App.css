@@ -74,6 +74,10 @@
   --sidebar-foreground: #1e1e1e;
   --sidebar-primary: oklch(0.216 0.006 56.043);
   --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-primary-12: oklch(0.216 0.006 56.043 / 12%);
+  --sidebar-primary-20: oklch(0.216 0.006 56.043 / 20%);
+  --sidebar-primary-50: oklch(0.216 0.006 56.043 / 50%);
+  --sidebar-primary-60: oklch(0.216 0.006 56.043 / 60%);
   --sidebar-accent: oklch(0.97 0.001 106.424);
   --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
   --sidebar-border: oklch(0.923 0.003 48.717);
@@ -108,6 +112,10 @@
   --sidebar-foreground: #fdfdfd;
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-primary-12: oklch(0.488 0.243 264.376 / 12%);
+  --sidebar-primary-20: oklch(0.488 0.243 264.376 / 20%);
+  --sidebar-primary-50: oklch(0.488 0.243 264.376 / 50%);
+  --sidebar-primary-60: oklch(0.488 0.243 264.376 / 60%);
   --sidebar-accent: oklch(0.268 0.007 34.298);
   --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
   --sidebar-border: oklch(1 0 0 / 10%);
@@ -118,7 +126,9 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
   body {
     @apply bg-background text-foreground;
+    overscroll-behavior: none;
   }
 }
