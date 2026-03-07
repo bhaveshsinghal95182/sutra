@@ -1,10 +1,10 @@
 import { Eye, Pencil, X } from 'lucide-react';
 
-import type { FileNode } from '@/lib/mock-data';
+import type { OpenFile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface EditorTabsProps {
-  openFiles: FileNode[];
+  openFiles: OpenFile[];
   activeFileId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;

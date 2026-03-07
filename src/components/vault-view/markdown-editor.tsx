@@ -163,9 +163,14 @@ const MarkdownEditor = forwardRef<HTMLDivElement, MarkdownEditorProps>(
             const val = lines[index];
             const before = val.slice(0, pos);
             const after = val.slice(pos);
+
+            // Auto-indent: capture leading whitespace from the current line
+            const wsMatch = before.match(/^(\s+)/);
+            const leadingWs = wsMatch ? wsMatch[1] : '';
+
             const next = [...lines];
             next[index] = before;
-            next.splice(index + 1, 0, after);
+            next.splice(index + 1, 0, leadingWs + after);
             onChange(next.join('\n'));
             setEditingLine(index + 1);
           }
@@ -453,12 +458,13 @@ const PreviewLine = ({
   const h1 = line.match(/^# (.+)$/);
   const h2 = line.match(/^## (.+)$/);
   const h3 = line.match(/^### (.+)$/);
-  const ul = line.match(/^[-*] (.+)$/);
-  const ol = line.match(/^(\d+)\. (.+)$/);
+  const ul = line.match(/^(\s*)[-*] (.+)$/);
+  const ol = line.match(/^(\s*)(\d+)\. (.+)$/);
   const bq = line.match(/^> (.+)$/);
   const img = line.match(/^!\[(.*)?\]\((.+?)\)$/);
 
   const ytId = getYouTubeId(line);
+  const getIndent = (s: string) => s.replace(/\t/g, '  ').length * 12;
 
   if (line.trim() === '') return <div className="h-4" />;
   if (ytId) return <YouTubeEmbed videoId={ytId} />;
@@ -508,16 +514,22 @@ const PreviewLine = ({
     );
   if (ul)
     return (
-      <div className={cn(base, 'flex gap-2 text-sm text-foreground')}>
+      <div
+        className={cn(base, 'flex gap-2 text-sm text-foreground')}
+        style={{ paddingLeft: `${getIndent(ul[1])}px` }}
+      >
         <span className="size-1.5 shrink-0 rounded-full bg-foreground/50 mt-2.5" />
-        <span className="break-words">{r(ul[1])}</span>
+        <span className="break-words">{r(ul[2])}</span>
       </div>
     );
   if (ol)
     return (
-      <div className={cn(base, 'flex gap-1.5 text-sm text-foreground')}>
-        <span className="text-muted-foreground shrink-0">{ol[1]}.</span>
-        <span className="break-words">{r(ol[2])}</span>
+      <div
+        className={cn(base, 'flex gap-1.5 text-sm text-foreground')}
+        style={{ paddingLeft: `${getIndent(ol[1])}px` }}
+      >
+        <span className="text-muted-foreground shrink-0">{ol[2]}.</span>
+        <span className="break-words">{r(ol[3])}</span>
       </div>
     );
 
@@ -538,11 +550,12 @@ const RenderedLine = ({
   const h1 = line.match(/^# (.+)$/);
   const h2 = line.match(/^## (.+)$/);
   const h3 = line.match(/^### (.+)$/);
-  const ul = line.match(/^[-*] (.+)$/);
-  const ol = line.match(/^(\d+)\. (.+)$/);
+  const ul = line.match(/^(\s*)[-*] (.+)$/);
+  const ol = line.match(/^(\s*)(\d+)\. (.+)$/);
   const bq = line.match(/^> (.+)$/);
 
   const ytId = getYouTubeId(line);
+  const getIndent = (s: string) => s.replace(/\t/g, '  ').length * 12;
 
   if (line.trim() === '') {
     return (
@@ -603,9 +616,10 @@ const RenderedLine = ({
       <div
         onClick={onClick}
         className={cn(base, 'flex gap-2 text-sm text-foreground')}
+        style={{ paddingLeft: `${getIndent(ul[1])}px` }}
       >
         <span className="size-1.5 shrink-0 rounded-full bg-foreground/50 mt-2.5" />
-        <span className="break-words">{r(ul[1])}</span>
+        <span className="break-words">{r(ul[2])}</span>
       </div>
     );
   if (ol)
@@ -613,9 +627,10 @@ const RenderedLine = ({
       <div
         onClick={onClick}
         className={cn(base, 'flex gap-1.5 text-sm text-foreground')}
+        style={{ paddingLeft: `${getIndent(ol[1])}px` }}
       >
-        <span className="text-muted-foreground shrink-0">{ol[1]}.</span>
-        <span className="break-words">{r(ol[2])}</span>
+        <span className="text-muted-foreground shrink-0">{ol[2]}.</span>
+        <span className="break-words">{r(ol[3])}</span>
       </div>
     );
 

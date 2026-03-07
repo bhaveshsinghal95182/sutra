@@ -1,7 +1,7 @@
 import { ChevronRight, FileText, Folder } from 'lucide-react';
 import { useState } from 'react';
 
-import type { FileNode } from '@/lib/mock-data';
+import type { FileNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface FileTreeProps {

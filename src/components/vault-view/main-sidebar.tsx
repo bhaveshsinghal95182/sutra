@@ -1,5 +1,5 @@
 import FileTree from '@/components/vault-view/file-tree';
-import type { FileNode } from '@/lib/mock-data';
+import type { FileNode } from '@/lib/types';
 
 interface MainSidebarProps {
   open: boolean;

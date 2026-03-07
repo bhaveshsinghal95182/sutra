@@ -2,7 +2,7 @@ import { Info, List, Tags, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 
-import { extractHeadings } from '@/lib/mock-data';
+import { extractHeadings } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface RightSidebarProps {

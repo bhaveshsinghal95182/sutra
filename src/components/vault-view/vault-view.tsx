@@ -9,33 +9,26 @@ import MarkdownEditor, {
 import RightSidebar from '@/components/vault-view/right-sidebar';
 import SettingsDialog from '@/components/vault-view/settings-dialog';
 import TitleBar from '@/components/vault-view/title-bar';
-import {
-  extractHeadings,
-  type FileNode,
-  getAllFiles,
-  mockFileTree,
-} from '@/lib/mock-data';
-
-const allFiles = getAllFiles(mockFileTree);
-const defaultFile = allFiles[0];
+import type { FileNode } from '@/lib/types';
+import { extractHeadings } from '@/lib/types';
+import { useFolderStore } from '@/store/useFolderStore';
 
 const Index = () => {
+  const {
+    fileTree,
+    openFiles,
+    activeFileId,
+    openFile,
+    closeFile,
+    setActiveFileId,
+    updateFileContent,
+  } = useFolderStore();
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [vimMode, setVimMode] = useState(false);
-  const [openFiles, setOpenFiles] = useState<FileNode[]>([defaultFile]);
-  const [activeFileId, setActiveFileId] = useState<string>(defaultFile.id);
-  const [fileContents, setFileContents] = useState<Record<string, string>>(
-    () => {
-      const map: Record<string, string> = {};
-      allFiles.forEach((f) => {
-        if (f.content) map[f.id] = f.content;
-      });
-      return map;
-    }
-  );
   const [highlightedSection, setHighlightedSection] = useState<{
     start: number;
     end: number;
@@ -45,9 +38,11 @@ const Index = () => {
   const visibleHeadingsRef = useRef<Set<number>>(new Set());
   const editorScrollRef = useRef<HTMLDivElement>(null);
 
-  const activeContent = fileContents[activeFileId] || '';
+  /* ── Derived state ── */
+  const activeFile = openFiles.find((f) => f.id === activeFileId);
+  const activeContent = activeFile?.content ?? '';
 
-  // Track which heading is currently visible via IntersectionObserver
+  /* ── Track which heading is currently visible via IntersectionObserver ── */
   useEffect(() => {
     const headings = extractHeadings(activeContent);
     if (headings.length === 0) return;
@@ -74,7 +69,6 @@ const Index = () => {
           }
         }
 
-        // Pick the last (furthest down) visible heading
         if (visibleHeadingsRef.current.size > 0) {
           setActiveHeadingIndex(Math.max(...visibleHeadingsRef.current));
         }
@@ -114,17 +108,15 @@ const Index = () => {
     [activeContent]
   );
 
-  const handleFileSelect = useCallback((file: FileNode) => {
-    setActiveFileId(file.id);
-    setOpenFiles((prev) => {
-      if (prev.find((f) => f.id === file.id)) return prev;
-      return [...prev, file];
-    });
-  }, []);
+  const handleFileSelect = useCallback(
+    (file: FileNode) => {
+      openFile(file);
+    },
+    [openFile]
+  );
 
   const handleWikilinkClick = useCallback(
     (target: string) => {
-      // Support [[File#Heading]] syntax
       const hashIdx = target.indexOf('#');
       const filePart =
         hashIdx > 0 ? target.slice(0, hashIdx) : hashIdx === 0 ? null : target;
@@ -147,63 +139,63 @@ const Index = () => {
       };
 
       if (filePart) {
-        const targetName = filePart.endsWith('.md')
-          ? filePart
-          : filePart + '.md';
-        const file = allFiles.find(
-          (f) =>
-            f.name.toLowerCase() === targetName.toLowerCase() ||
-            f.name.replace(/\.md$/, '').toLowerCase() === filePart.toLowerCase()
-        );
-        if (file) {
-          handleFileSelect(file);
-          // After navigating, highlight the target heading or the first heading
-          const targetContent = file.content || '';
-          const targetHeading = headingPart || null;
-          setTimeout(() => {
-            if (targetHeading) {
-              scrollToHeading(targetContent, targetHeading);
-            } else {
-              // Highlight the first heading (H1) for visual feedback
-              const lines = targetContent.split('\n');
-              for (let i = 0; i < lines.length; i++) {
-                if (lines[i].match(/^#{1,6}\s/)) {
-                  handleHeadingClick(i);
-                  const el = document.getElementById(`heading-${i}`);
-                  if (el)
-                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  break;
-                }
+        // Search the file tree for a matching file by name
+        const findFile = (nodes: FileNode[]): FileNode | undefined => {
+          for (const node of nodes) {
+            if (node.type === 'file') {
+              const targetName = filePart.endsWith('.md')
+                ? filePart
+                : filePart + '.md';
+              if (
+                node.name.toLowerCase() === targetName.toLowerCase() ||
+                node.name.replace(/\.md$/, '').toLowerCase() ===
+                  filePart.toLowerCase()
+              ) {
+                return node;
               }
             }
-          }, 50);
+            if (node.children) {
+              const found = findFile(node.children);
+              if (found) return found;
+            }
+          }
+          return undefined;
+        };
+
+        const file = findFile(fileTree);
+        if (file) {
+          handleFileSelect(file);
+          // After opening, scroll to heading if requested
+          if (headingPart) {
+            setTimeout(() => {
+              const opened = useFolderStore
+                .getState()
+                .openFiles.find((f) => f.id === file.id);
+              if (opened) scrollToHeading(opened.content, headingPart);
+            }, 100);
+          }
         }
       } else if (headingPart) {
-        // Same-file heading link
         scrollToHeading(activeContent, headingPart);
       }
     },
-    [activeContent, handleHeadingClick, handleFileSelect]
+    [activeContent, handleHeadingClick, handleFileSelect, fileTree]
   );
 
   const handleCloseTab = useCallback(
     (id: string) => {
-      setOpenFiles((prev) => {
-        const next = prev.filter((f) => f.id !== id);
-        if (id === activeFileId && next.length > 0) {
-          setActiveFileId(next[next.length - 1].id);
-        }
-        return next;
-      });
+      closeFile(id);
     },
-    [activeFileId]
+    [closeFile]
   );
 
   const handleContentChange = useCallback(
     (content: string) => {
-      setFileContents((prev) => ({ ...prev, [activeFileId]: content }));
+      if (activeFileId) {
+        updateFileContent(activeFileId, content);
+      }
     },
-    [activeFileId]
+    [activeFileId, updateFileContent]
   );
 
   return (
@@ -219,7 +211,7 @@ const Index = () => {
         />
         <MainSidebar
           open={sidebarOpen}
-          fileTree={mockFileTree}
+          fileTree={fileTree}
           activeFileId={activeFileId}
           onFileSelect={handleFileSelect}
         />
@@ -235,7 +227,7 @@ const Index = () => {
               previewMode={previewMode}
               onTogglePreviewMode={() => setPreviewMode(!previewMode)}
             />
-            {openFiles.length > 0 ? (
+            {openFiles.length > 0 && activeFile ? (
               <MarkdownEditor
                 ref={editorScrollRef}
                 content={activeContent}
