@@ -1,12 +1,19 @@
-import { animate, useMotionValue, useSpring } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import * as d3 from 'd3';
+import { useEffect, useRef } from 'react';
 
 import graphData from '@/lib/graph-data.json';
-import {
-  buildGraphFromData,
-  type GraphLink,
-  type GraphNode,
-} from '@/lib/graph-utils';
+
+interface GraphNode extends d3.SimulationNodeDatum {
+  id: string;
+  name: string;
+  fileId: string;
+  linkCount?: number;
+}
+
+interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
+  source: string | GraphNode;
+  target: string | GraphNode;
+}
 
 interface GraphViewProps {
   activeFileId: string;
@@ -14,317 +21,231 @@ interface GraphViewProps {
 }
 
 const GraphView = ({ activeFileId, onFileSelect }: GraphViewProps) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const nodesRef = useRef<GraphNode[]>([]);
-  const linksRef = useRef<GraphLink[]>([]);
-  const animFrameRef = useRef(0);
-  const dragNodeRef = useRef<GraphNode | null>(null);
-  const hoveredNodeRef = useRef<GraphNode | null>(null);
-  const lastMouseRef = useRef({ x: 0, y: 0 });
-  const dragStartRef = useRef({ x: 0, y: 0 });
-  const velocityRef = useRef({ x: 0, y: 0 });
-  const isPanningRef = useRef(false);
-  const [, setHovered] = useState(false);
-
-  const camX = useMotionValue(0);
-  const camY = useMotionValue(0);
-  const camZoom = useMotionValue(1);
-  const springX = useSpring(camX, { stiffness: 58, damping: 44, mass: 1.05 });
-  const springY = useSpring(camY, { stiffness: 58, damping: 44, mass: 1.05 });
-  const springZoom = useSpring(camZoom, {
-    stiffness: 90,
-    damping: 46,
-    mass: 1.1,
-  });
+  const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const g = buildGraphFromData(graphData);
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    g.nodes.forEach((n, i) => {
-      const angle = (i / g.nodes.length) * Math.PI * 2;
-      const radius = Math.min(w, h) * 0.25;
-      n.x = w / 2 + Math.cos(angle) * radius;
-      n.y = h / 2 + Math.sin(angle) * radius;
+    if (!svgRef.current || !containerRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+    svg.selectAll('*').remove();
+
+    const container = containerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    // Compute link counts
+    const linkCount: Record<string, number> = {};
+    graphData.nodes.forEach((n) => (linkCount[n.id] = 0));
+    graphData.links.forEach((l) => {
+      linkCount[l.source] = (linkCount[l.source] || 0) + 1;
+      linkCount[l.target] = (linkCount[l.target] || 0) + 1;
     });
-    nodesRef.current = g.nodes;
-    linksRef.current = g.links;
-    camX.set(0);
-    camY.set(0);
-    camZoom.set(1);
-  }, [camX, camY, camZoom]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const nodes: GraphNode[] = graphData.nodes.map((n) => ({
+      ...n,
+      linkCount: linkCount[n.id] || 0,
+    }));
+    const links: GraphLink[] = graphData.links.map((l) => ({ ...l }));
 
-    let running = true;
-    const dpr = window.devicePixelRatio || 1;
+    const g = svg.append('g');
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-    };
-    resize();
-    const obs = new ResizeObserver(resize);
-    obs.observe(canvas);
+    // Zoom
+    svg.call(
+      d3
+        .zoom<SVGSVGElement, unknown>()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (event) => g.attr('transform', event.transform))
+    );
 
-    const damping = 0.78;
-    const bounceFactor = 0.18;
-    const edgeStiffness = 0.05;
-    const maxVelocity = 1.8;
+    // Get colors from CSS variables
+    const style = getComputedStyle(document.documentElement);
+    const foreground = style.getPropertyValue('--foreground').trim() || '#888';
+    const mutedForeground =
+      style.getPropertyValue('--muted-foreground').trim() || '#888';
+    const primary = style.getPropertyValue('--primary').trim() || '#888';
 
-    const tick = () => {
-      if (!running) return;
-      const w = canvas.width / dpr;
-      const h = canvas.height / dpr;
-      const nodes = nodesRef.current;
-      const links = linksRef.current;
-      const idealDist =
-        (Math.min(w, h) / Math.max(2, nodes.length * 0.45)) * 0.8;
+    // Drag handlers
+    function dragstarted(
+      event: d3.D3DragEvent<SVGCircleElement, GraphNode, GraphNode>,
+      d: GraphNode
+    ) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
 
-      links.forEach((l) => {
-        const s = nodes.find((n) => n.id === l.source);
-        const t = nodes.find((n) => n.id === l.target);
-        if (!s || !t) return;
-        const dx = t.x - s.x;
-        const dy = t.y - s.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = (dist - idealDist) * edgeStiffness;
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        s.vx += fx;
-        s.vy += fy;
-        t.vx -= fx;
-        t.vy -= fy;
-      });
+    function dragged(
+      event: d3.D3DragEvent<SVGCircleElement, GraphNode, GraphNode>,
+      d: GraphNode
+    ) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
 
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i];
-          const b = nodes[j];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          if (dist < idealDist * 1.25) {
-            const force = ((idealDist * 1.25 - dist) / dist) * 0.18;
-            a.vx -= dx * force;
-            a.vy -= dy * force;
-            b.vx += dx * force;
-            b.vy += dy * force;
-          }
-        }
-      }
+    function dragended(
+      event: d3.D3DragEvent<SVGCircleElement, GraphNode, GraphNode>,
+      d: GraphNode
+    ) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
 
-      const pad = 30;
-      nodes.forEach((n) => {
-        if (n === dragNodeRef.current) return;
-        n.vx *= damping;
-        n.vy *= damping;
-        n.vx = Math.max(-maxVelocity, Math.min(maxVelocity, n.vx));
-        n.vy = Math.max(-maxVelocity, Math.min(maxVelocity, n.vy));
-        n.x += n.vx;
-        n.y += n.vy;
-        if (n.x < pad) {
-          n.x = pad;
-          n.vx = Math.abs(n.vx) * bounceFactor;
-        }
-        if (n.x > w - pad) {
-          n.x = w - pad;
-          n.vx = -Math.abs(n.vx) * bounceFactor;
-        }
-        if (n.y < pad) {
-          n.y = pad;
-          n.vy = Math.abs(n.vy) * bounceFactor;
-        }
-        if (n.y > h - pad) {
-          n.y = h - pad;
-          n.vy = -Math.abs(n.vy) * bounceFactor;
-        }
-      });
+    // Simulation with ultra-smooth settings
+    const simulation = d3
+      .forceSimulation(nodes)
+      .force(
+        'link',
+        d3
+          .forceLink<GraphNode, GraphLink>(links)
+          .id((d) => d.id)
+          .distance(90)
+          .strength(0.4)
+      )
+      .force('charge', d3.forceManyBody().strength(-200))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(25))
+      .alphaDecay(0.01)
+      .velocityDecay(0.6);
 
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, w, h);
-      const ox = springX.get();
-      const oy = springY.get();
-      const z = springZoom.get();
-      ctx.save();
-      ctx.translate(w / 2, h / 2);
-      ctx.scale(z, z);
-      ctx.translate(-w / 2 + ox, -h / 2 + oy);
+    // Links
+    const link = g
+      .append('g')
+      .selectAll('line')
+      .data(links)
+      .join('line')
+      .attr('stroke', mutedForeground)
+      .attr('stroke-opacity', 0.4)
+      .attr('stroke-width', 2);
 
-      const styles = getComputedStyle(canvas);
-      const fg = styles.getPropertyValue('color') || '#cdd6f4';
-      const muted = styles.getPropertyValue('--muted-foreground')
-        ? `hsl(${styles.getPropertyValue('--muted-foreground')})`
-        : 'rgba(205,214,244,0.3)';
-      const accent = styles.getPropertyValue('--primary')
-        ? `hsl(${styles.getPropertyValue('--primary')})`
-        : '#89b4fa';
-
-      links.forEach((l) => {
-        const s = nodes.find((n) => n.id === l.source);
-        const t = nodes.find((n) => n.id === l.target);
-        if (!s || !t) return;
-        ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(t.x, t.y);
-        ctx.strokeStyle = muted;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      });
-
-      nodes.forEach((n) => {
-        const r = 4 + n.linkCount * 1.5;
-        const isActive = n.fileId === activeFileId;
-        const isHovered = n === hoveredNodeRef.current;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, r + (isHovered ? 2 : 0), 0, Math.PI * 2);
-        ctx.fillStyle = isActive ? accent : isHovered ? accent : fg;
-        ctx.globalAlpha = isActive ? 1 : isHovered ? 0.9 : 0.5;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-
-        ctx.font = `${isActive || isHovered ? '600' : '400'} 11px Inter, system-ui, sans-serif`;
-        ctx.fillStyle = fg;
-        ctx.globalAlpha = isActive ? 1 : isHovered ? 0.95 : 0.7;
-        ctx.textAlign = 'center';
-        ctx.fillText(n.name, n.x, n.y + r + 14);
-        ctx.globalAlpha = 1;
-      });
-
-      ctx.restore();
-      animFrameRef.current = requestAnimationFrame(tick);
-    };
-
-    animFrameRef.current = requestAnimationFrame(tick);
-    return () => {
-      running = false;
-      cancelAnimationFrame(animFrameRef.current);
-      obs.disconnect();
-    };
-  }, [activeFileId, springX, springY, springZoom]);
-
-  const toWorld = useCallback(
-    (cx: number, cy: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      const mx = cx - rect.left;
-      const my = cy - rect.top;
-      const w = rect.width;
-      const h = rect.height;
-      const z = springZoom.get();
-      const ox = springX.get();
-      const oy = springY.get();
-      return {
-        x: (mx - w / 2) / z + w / 2 - ox,
-        y: (my - h / 2) / z + h / 2 - oy,
-      };
-    },
-    [springX, springY, springZoom]
-  );
-
-  const findNode = useCallback((wx: number, wy: number) => {
-    return nodesRef.current.find((n) => {
-      const r = (4 + n.linkCount * 1.5 + 2) * 1.7;
-      return (n.x - wx) ** 2 + (n.y - wy) ** 2 < r * r;
-    });
-  }, []);
-
-  const flingMultiplier = 0.05;
-
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const { x, y } = toWorld(e.clientX, e.clientY);
-      const node = findNode(x, y);
-      if (node) {
-        dragNodeRef.current = node;
-        node.vx = 0;
-        node.vy = 0;
-        velocityRef.current = { x: 0, y: 0 };
-      } else {
-        isPanningRef.current = true;
-      }
-      dragStartRef.current = { x: e.clientX, y: e.clientY };
-      lastMouseRef.current = { x: e.clientX, y: e.clientY };
-    },
-    [toWorld, findNode]
-  );
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const { x, y } = toWorld(e.clientX, e.clientY);
-      if (dragNodeRef.current) {
-        const dx = e.clientX - lastMouseRef.current.x;
-        const dy = e.clientY - lastMouseRef.current.y;
-        velocityRef.current = { x: dx, y: dy };
-        dragNodeRef.current.x = x;
-        dragNodeRef.current.y = y;
-      } else if (isPanningRef.current) {
-        const dx = e.clientX - lastMouseRef.current.x;
-        const dy = e.clientY - lastMouseRef.current.y;
-        const z = springZoom.get();
-        camX.set(camX.get() + dx / z);
-        camY.set(camY.get() + dy / z);
-      } else {
-        const node = findNode(x, y);
-        hoveredNodeRef.current = node || null;
-        setHovered(Boolean(node));
-      }
-      lastMouseRef.current = { x: e.clientX, y: e.clientY };
-    },
-    [toWorld, findNode, camX, camY, springZoom]
-  );
-
-  const handleMouseUp = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (dragNodeRef.current) {
-        dragNodeRef.current.vx = velocityRef.current.x * flingMultiplier;
-        dragNodeRef.current.vy = velocityRef.current.y * flingMultiplier;
-        const dist =
-          Math.abs(e.clientX - dragStartRef.current.x) +
-          Math.abs(e.clientY - dragStartRef.current.y);
-        if (dist < 4) onFileSelect(dragNodeRef.current.fileId);
-        dragNodeRef.current = null;
-      }
-      isPanningRef.current = false;
-    },
-    [onFileSelect]
-  );
-
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-      const newZoom = Math.max(
-        0.3,
-        Math.min(3, camZoom.get() - e.deltaY * 0.001)
+    // Nodes
+    const node = g
+      .append('g')
+      .selectAll('circle')
+      .data(nodes)
+      .join('circle')
+      .attr('r', (d) => 5 + Math.sqrt(d.linkCount || 0) * 3)
+      .attr('fill', (d) =>
+        d.fileId === activeFileId
+          ? primary
+          : (d.linkCount || 0) > 0
+            ? primary
+            : mutedForeground
+      )
+      .attr('opacity', (d) => (d.fileId === activeFileId ? 1 : 0.6))
+      .attr('cursor', 'pointer')
+      .on('click', (_event, d) => {
+        onFileSelect(d.fileId);
+      })
+      .call(
+        d3
+          .drag<SVGCircleElement, GraphNode>()
+          .on('start', dragstarted)
+          .on('drag', dragged)
+          .on('end', dragended) as never
       );
-      animate(camZoom, newZoom, { duration: 0.18 });
-    },
-    [camZoom]
-  );
+
+    // Labels
+    const label = g
+      .append('g')
+      .selectAll('text')
+      .data(nodes)
+      .join('text')
+      .text((d) => d.name)
+      .attr('fill', foreground)
+      .attr('font-size', 11)
+      .attr('font-family', 'Inter, system-ui, sans-serif')
+      .attr('font-weight', (d) => (d.fileId === activeFileId ? 600 : 400))
+      .attr('opacity', (d) => (d.fileId === activeFileId ? 1 : 0.7))
+      .attr('pointer-events', 'none')
+      .attr('text-anchor', 'middle')
+      .attr('dy', (d) => 5 + Math.sqrt(d.linkCount || 0) * 3 + 14);
+
+    // Hover highlight
+    node
+      .on('mouseenter', (_event, d) => {
+        const connectedIds = new Set<string>();
+        connectedIds.add(d.id);
+        links.forEach((l) => {
+          const sId =
+            typeof l.source === 'object'
+              ? (l.source as GraphNode).id
+              : l.source;
+          const tId =
+            typeof l.target === 'object'
+              ? (l.target as GraphNode).id
+              : l.target;
+          if (sId === d.id) connectedIds.add(tId);
+          if (tId === d.id) connectedIds.add(sId);
+        });
+
+        node.attr('opacity', (n) =>
+          n.fileId === activeFileId ? 1 : connectedIds.has(n.id) ? 0.8 : 0.15
+        );
+        label.attr('opacity', (n) =>
+          n.fileId === activeFileId ? 1 : connectedIds.has(n.id) ? 1 : 0.2
+        );
+        link.attr('stroke-opacity', (l) => {
+          const sId =
+            typeof l.source === 'object'
+              ? (l.source as GraphNode).id
+              : l.source;
+          const tId =
+            typeof l.target === 'object'
+              ? (l.target as GraphNode).id
+              : l.target;
+          return sId === d.id || tId === d.id ? 0.8 : 0.1;
+        });
+      })
+      .on('mouseleave', () => {
+        node.attr('opacity', (n) => (n.fileId === activeFileId ? 1 : 0.6));
+        label.attr('opacity', (n) => (n.fileId === activeFileId ? 1 : 0.7));
+        link.attr('stroke-opacity', 0.4);
+      });
+
+    // Tick
+    const padding = 50;
+    simulation.on('tick', () => {
+      nodes.forEach((d) => {
+        d.x = Math.max(padding, Math.min(width - padding, d.x!));
+        d.y = Math.max(padding, Math.min(height - padding, d.y!));
+      });
+
+      link
+        .attr('x1', (d) => (d.source as GraphNode).x!)
+        .attr('y1', (d) => (d.source as GraphNode).y!)
+        .attr('x2', (d) => (d.target as GraphNode).x!)
+        .attr('y2', (d) => (d.target as GraphNode).y!);
+      node.attr('cx', (d) => d.x!).attr('cy', (d) => d.y!);
+      label.attr('x', (d) => d.x!).attr('y', (d) => d.y!);
+    });
+
+    const handleResize = () => {
+      const newWidth = container.clientWidth;
+      const newHeight = container.clientHeight;
+      svg.attr('width', newWidth).attr('height', newHeight);
+      simulation.force('center', d3.forceCenter(newWidth / 2, newHeight / 2));
+      simulation.alpha(0.3).restart();
+    };
+
+    const resizeObs = new ResizeObserver(handleResize);
+    resizeObs.observe(container);
+
+    return () => {
+      simulation.stop();
+      resizeObs.disconnect();
+    };
+  }, [activeFileId, onFileSelect]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="h-full w-full cursor-grab active:cursor-grabbing"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={() => {
-        dragNodeRef.current = null;
-        isPanningRef.current = false;
-        hoveredNodeRef.current = null;
-        setHovered(false);
-      }}
-      onWheel={handleWheel}
-    />
+    <div ref={containerRef} className="h-full w-full">
+      <svg
+        ref={svgRef}
+        className="h-full w-full"
+        style={{ display: 'block' }}
+      />
+    </div>
   );
 };
 
