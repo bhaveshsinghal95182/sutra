@@ -144,6 +144,11 @@ const OutlineSVG = ({
             cx={cx}
             cy={cy}
             r={isActive ? 3 : 2.5}
+            fill={
+              isInPath
+                ? 'var(--sidebar-primary-60)'
+                : 'var(--sidebar-primary-20)'
+            }
             animate={{
               r: isActive ? 3 : 2.5,
               fill: isInPath

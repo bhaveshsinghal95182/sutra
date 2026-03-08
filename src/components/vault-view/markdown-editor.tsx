@@ -222,6 +222,58 @@ const MarkdownEditor = forwardRef<HTMLDivElement, MarkdownEditorProps>(
       [lines]
     );
 
+    /* ── Handle Ctrl+A at the editor level ── */
+    const [isAllSelected, setIsAllSelected] = useState(false);
+
+    const handleGlobalKeyDown = useCallback(
+      (e: KeyboardEvent<HTMLDivElement>) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+          e.preventDefault();
+
+          // Copy all content to clipboard
+          navigator.clipboard.writeText(content).catch(console.error);
+
+          // Show visual feedback
+          setIsAllSelected(true);
+          setEditingLine(null); // Unfocus current line
+        } else if (
+          isAllSelected &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !['Shift', 'Alt', 'Control', 'Meta'].includes(e.key)
+        ) {
+          // Clear selection on other key presses
+          setIsAllSelected(false);
+        }
+      },
+      [content, isAllSelected]
+    );
+
+    // Click anywhere else clears the selection visual
+    const handleGlobalClick = useCallback(() => {
+      if (isAllSelected) setIsAllSelected(false);
+    }, [isAllSelected]);
+
+    // Intercept native copy to handle multi-line drag selections
+    const handleGlobalCopy = useCallback(
+      (e: React.ClipboardEvent<HTMLDivElement>) => {
+        if (isAllSelected) {
+          e.preventDefault();
+          e.clipboardData.setData('text/plain', content);
+          return;
+        }
+
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) {
+          e.preventDefault();
+          let text = selection.toString();
+          text = text.replace(/^[0-9]+\r?\n/gm, '');
+          e.clipboardData.setData('text/plain', text);
+        }
+      },
+      [content, isAllSelected]
+    );
+
     if (previewMode) {
       return (
         <div ref={ref} className="flex flex-1 overflow-y-auto justify-center">
@@ -283,7 +335,14 @@ const MarkdownEditor = forwardRef<HTMLDivElement, MarkdownEditorProps>(
     }
 
     return (
-      <div ref={ref} className="flex flex-1 overflow-y-auto justify-center">
+      <div
+        ref={ref}
+        className="flex flex-1 overflow-y-auto justify-center outline-none"
+        onKeyDown={handleGlobalKeyDown}
+        onClick={handleGlobalClick}
+        onCopy={handleGlobalCopy}
+        tabIndex={0}
+      >
         <div
           className="grid w-full max-w-3xl py-4"
           style={{ gridTemplateColumns: 'auto auto 1fr' }}
@@ -327,8 +386,10 @@ const MarkdownEditor = forwardRef<HTMLDivElement, MarkdownEditorProps>(
                 <div
                   className={cn(
                     'select-none font-mono text-xs text-muted-foreground/40 pr-3 pt-[0.4rem] text-right transition-colors duration-500',
-                    isHighlighted && 'bg-yellow-400/25'
+                    isHighlighted && 'bg-yellow-400/25',
+                    isAllSelected && 'bg-blue-500/20'
                   )}
+                  style={{ userSelect: 'none' }}
                 >
                   {i + 1}
                 </div>
@@ -337,7 +398,8 @@ const MarkdownEditor = forwardRef<HTMLDivElement, MarkdownEditorProps>(
                 <div
                   className={cn(
                     'pr-8 pl-2 min-w-0 transition-colors duration-500',
-                    isHighlighted && 'bg-yellow-400/25'
+                    isHighlighted && 'bg-yellow-400/25',
+                    isAllSelected && 'bg-blue-500/20'
                   )}
                 >
                   {editingLine === i ? (
@@ -569,7 +631,7 @@ const RenderedLine = ({
       </div>
     );
 
-  const base = cn(LINE_MIN_H, 'cursor-text py-0.5 break-words');
+  const base = cn(LINE_MIN_H, 'cursor-text py-0.5 break-words select-text');
   const r = (t: string) => renderInline(t, onWikilinkClick);
 
   if (h3)
