@@ -96,9 +96,10 @@ export const useFolderStore = create<FolderState>((set, get) => ({
       return;
     }
 
-    // Read content from disk — id is the full absolute path
+    // Read content from disk; file nodes store the absolute path in `id`.
     try {
-      const content = await readTextFile(node.id);
+      const path = node.id;
+      const content = await readTextFile(path);
       const file: OpenFile = { id: node.id, name: node.name, content };
       set((state) => ({
         openFiles: [...state.openFiles, file],

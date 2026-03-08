@@ -1,0 +1,14 @@
+{
+  "nodes": [
+    { "id": "1a", "name": "2026-03-07", "fileId": "1a" },
+    { "id": "1b", "name": "2026-03-06", "fileId": "1b" },
+    { "id": "2a", "name": "Vault Editor", "fileId": "2a" },
+    { "id": "2b", "name": "Reading List", "fileId": "2b" },
+    { "id": "3a", "name": "Meeting Notes", "fileId": "3a" },
+    { "id": "4", "name": "README", "fileId": "4" }
+  ],
+  "links": [
+    { "source": "1a", "target": "2a" },
+    { "source": "1a", "target": "2b" }
+  ]
+}

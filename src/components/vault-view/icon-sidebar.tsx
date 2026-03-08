@@ -1,4 +1,11 @@
-import { PanelLeft, PanelRight, Search, Settings, Star } from 'lucide-react';
+import {
+  GitGraph,
+  PanelLeft,
+  PanelRight,
+  Search,
+  Settings,
+  Star,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -8,6 +15,7 @@ interface IconSidebarProps {
   onToggleRightSidebar: () => void;
   rightSidebarOpen: boolean;
   onOpenSettings: () => void;
+  onOpenGraph: () => void;
 }
 
 const IconSidebar = ({
@@ -16,6 +24,7 @@ const IconSidebar = ({
   onToggleRightSidebar,
   rightSidebarOpen,
   onOpenSettings,
+  onOpenGraph,
 }: IconSidebarProps) => {
   const icons = [
     {
@@ -30,6 +39,7 @@ const IconSidebar = ({
       onClick: onToggleRightSidebar,
       active: rightSidebarOpen,
     },
+    { icon: GitGraph, label: 'Graph view', onClick: onOpenGraph || (() => {}) },
     { icon: Search, label: 'Search', onClick: () => {} },
     { icon: Star, label: 'Starred', onClick: () => {} },
   ];

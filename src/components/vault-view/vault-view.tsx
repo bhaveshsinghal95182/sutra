@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import EditorTabs from '@/components/vault-view/editor-tabs';
+import GraphView from '@/components/vault-view/graph-view';
 import IconSidebar from '@/components/vault-view/icon-sidebar';
 import MainSidebar from '@/components/vault-view/main-sidebar';
 import MarkdownEditor, {
@@ -28,6 +29,7 @@ const Index = () => {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
   const [vimMode, setVimMode] = useState(false);
   const [highlightedSection, setHighlightedSection] = useState<{
     start: number;
@@ -208,6 +210,7 @@ const Index = () => {
           onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
           rightSidebarOpen={rightSidebarOpen}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenGraph={() => setGraphOpen(true)}
         />
         <MainSidebar
           open={sidebarOpen}
@@ -225,9 +228,36 @@ const Index = () => {
               onSelectTab={setActiveFileId}
               onCloseTab={handleCloseTab}
               previewMode={previewMode}
-              onTogglePreviewMode={() => setPreviewMode(!previewMode)}
+              onTogglePreviewMode={
+                graphOpen ? undefined : () => setPreviewMode(!previewMode)
+              }
+              graphOpen={graphOpen}
+              onCloseGraph={() => setGraphOpen(false)}
             />
-            {openFiles.length > 0 && activeFile ? (
+            {graphOpen ? (
+              <GraphView
+                activeFileId={activeFileId ?? ''}
+                onFileSelect={(fileId) => {
+                  const findFileById = (nodes: FileNode[]): FileNode | null => {
+                    for (const node of nodes) {
+                      if (node.type === 'file' && node.id === fileId)
+                        return node;
+                      if (node.children) {
+                        const found = findFileById(node.children);
+                        if (found) return found;
+                      }
+                    }
+                    return null;
+                  };
+
+                  const file = findFileById(fileTree);
+                  if (file) {
+                    handleFileSelect(file);
+                    setGraphOpen(false);
+                  }
+                }}
+              />
+            ) : openFiles.length > 0 && activeFile ? (
               <MarkdownEditor
                 ref={editorScrollRef}
                 content={activeContent}
