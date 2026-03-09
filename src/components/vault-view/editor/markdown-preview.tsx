@@ -94,7 +94,36 @@ renderer.image = function ({ text, href }) {
   </figure>`;
 };
 
-// Note: Table rendering uses default marked behavior
+renderer.table = function ({ header, rows }) {
+  const headerRow = (header as { text: string }[])
+    .map(
+      (cell) =>
+        `<th class="border border-border/40 bg-muted/50 px-4 py-2 text-left font-semibold text-foreground">${cell.text}</th>`
+    )
+    .join('');
+
+  const bodyRows = (rows as { text: string }[][])
+    .map((row) => {
+      const cells = row
+        .map(
+          (cell) =>
+            `<td class="border border-border/40 px-4 py-2 text-foreground">${cell.text}</td>`
+        )
+        .join('');
+      return `<tr class="hover:bg-muted/30 transition-colors">${cells}</tr>`;
+    })
+    .join('');
+
+  return `<div class="my-4 overflow-x-auto rounded-lg border border-border/40">
+    <table class="w-full border-collapse">
+      <thead>
+        <tr>${headerRow}</tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+  </div>`;
+};
+
 marked.setOptions({ renderer, gfm: true, breaks: true });
 
 function renderMath(html: string): string {
