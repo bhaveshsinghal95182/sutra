@@ -9,11 +9,22 @@ import MainSidebar from '@/components/vault-view/main-sidebar';
 import RightSidebar from '@/components/vault-view/right-sidebar';
 import SettingsDialog from '@/components/vault-view/settings-dialog';
 import TitleBar from '@/components/vault-view/title-bar';
+import type { ThemeSettings } from '@/lib/theme-settings';
 import type { FileNode } from '@/lib/types';
 import { extractHeadings } from '@/lib/types';
 import { useFolderStore } from '@/store/useFolderStore';
 
-const Index = () => {
+interface VaultViewProps {
+  themeSettings: ThemeSettings;
+  onThemeSettingsChange: (settings: ThemeSettings) => void;
+  themeTemplates: Record<string, string>;
+}
+
+const Index = ({
+  themeSettings,
+  onThemeSettingsChange,
+  themeTemplates,
+}: VaultViewProps) => {
   const {
     fileTree,
     openFiles,
@@ -30,11 +41,18 @@ const Index = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [vimMode, setVimMode] = useState(false);
-  const [isDark, setIsDark] = useState(
+  const [showLineNumbers, setShowLineNumbers] = useState(true);
+  const [systemDark, setSystemDark] = useState(
     () =>
-      typeof document !== 'undefined' &&
-      document.documentElement.classList.contains('dark')
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
   );
+  const isDark =
+    themeSettings.mode === 'dark'
+      ? true
+      : themeSettings.mode === 'light'
+        ? false
+        : systemDark;
   const [activeHeadingIndex, setActiveHeadingIndex] = useState<number>(0);
   const visibleHeadingsRef = useRef<Set<number>>(new Set());
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -43,21 +61,12 @@ const Index = () => {
   const activeFile = openFiles.find((f) => f.id === activeFileId);
   const activeContent = activeFile?.content ?? '';
 
-  // Keep CodeMirror theme in sync with the app's dark class.
+  // Listen for OS dark-mode changes so `mode: "system"` stays reactive.
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const root = document.documentElement;
-    const observer = new MutationObserver(() => {
-      setIsDark(root.classList.contains('dark'));
-    });
-
-    observer.observe(root, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => setSystemDark(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
   }, []);
 
   /* ── Track which heading is currently visible via IntersectionObserver ── */
@@ -213,14 +222,16 @@ const Index = () => {
                   <MarkdownPreview content={activeContent} />
                 </div>
               ) : (
-                <MarkdownEditor
-                  content={activeContent}
-                  isDark={isDark}
-                  showLineNumbers={true}
-                  showRelativeNumbers={false}
-                  vimMode={vimMode}
-                  onContentChange={handleContentChange}
-                />
+                <div className="flex flex-1 overflow-hidden px-12 bg-background">
+                  <MarkdownEditor
+                    content={activeContent}
+                    isDark={isDark}
+                    showLineNumbers={showLineNumbers}
+                    showRelativeNumbers={false}
+                    vimMode={vimMode}
+                    onContentChange={handleContentChange}
+                  />
+                </div>
               )
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -245,6 +256,11 @@ const Index = () => {
         onOpenChange={setSettingsOpen}
         vimMode={vimMode}
         onVimModeChange={setVimMode}
+        showLineNumbers={showLineNumbers}
+        onShowLineNumbersChange={setShowLineNumbers}
+        themeSettings={themeSettings}
+        onThemeSettingsChange={onThemeSettingsChange}
+        themeTemplates={themeTemplates}
       />
     </div>
   );

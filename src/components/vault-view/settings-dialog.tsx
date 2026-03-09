@@ -11,11 +11,20 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import JsonCodeEditor from '@/components/ui/json-code-editor';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import {
+  parseThemeSettingsJson,
+  resolveThemeIsDark,
+  type ThemeMode,
+  type ThemeSettings,
+  themeSettingsToJson,
+} from '@/lib/theme-settings';
 import { cn } from '@/lib/utils';
 
 interface SettingsDialogProps {
@@ -23,6 +32,11 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   vimMode: boolean;
   onVimModeChange: (enabled: boolean) => void;
+  showLineNumbers: boolean;
+  onShowLineNumbersChange: (enabled: boolean) => void;
+  themeSettings: ThemeSettings;
+  onThemeSettingsChange: (settings: ThemeSettings) => void;
+  themeTemplates: Record<string, string>;
 }
 
 const sections = [
@@ -40,16 +54,22 @@ const SettingsDialog = ({
   onOpenChange,
   vimMode,
   onVimModeChange,
+  showLineNumbers,
+  onShowLineNumbersChange,
+  themeSettings,
+  onThemeSettingsChange,
+  themeTemplates,
 }: SettingsDialogProps) => {
   const [activeSection, setActiveSection] = useState('editor');
 
   // Dummy state for all the placeholder settings
   const [fontSize, setFontSize] = useState('14');
-  const [lineNumbers, setLineNumbers] = useState(true);
   const [wordWrap, setWordWrap] = useState(true);
   const [minimap, setMinimap] = useState(false);
-  const [theme, setTheme] = useState('dark');
-  const [accentColor, setAccentColor] = useState('blue');
+  const [themeJsonText, setThemeJsonText] = useState(() =>
+    themeSettingsToJson(themeSettings)
+  );
+  const [themeJsonError, setThemeJsonError] = useState<string | null>(null);
   const [compactMode, setCompactMode] = useState(false);
   const [sidebarPosition, setSidebarPosition] = useState('left');
   const [showBreadcrumbs, setShowBreadcrumbs] = useState(true);
@@ -61,6 +81,32 @@ const SettingsDialog = ({
   const [crashReports, setCrashReports] = useState(true);
   const [autoSave, setAutoSave] = useState(true);
   const [backupInterval, setBackupInterval] = useState('5');
+  const isDarkTheme = resolveThemeIsDark(themeSettings.mode);
+
+  const handleThemeModeChange = (mode: string) => {
+    onThemeSettingsChange({
+      ...themeSettings,
+      mode: mode as ThemeMode,
+    });
+  };
+
+  const handleApplyThemeJson = () => {
+    try {
+      const parsed = parseThemeSettingsJson(themeJsonText);
+      onThemeSettingsChange(parsed);
+      setThemeJsonError(null);
+    } catch (error) {
+      setThemeJsonError(
+        error instanceof Error ? error.message : 'Invalid theme JSON.'
+      );
+    }
+  };
+
+  const handleResetThemeJson = () => {
+    const text = themeSettingsToJson(themeSettings);
+    setThemeJsonText(text);
+    setThemeJsonError(null);
+  };
 
   const SettingRow = ({
     icon: Icon,
@@ -134,7 +180,10 @@ const SettingsDialog = ({
               label="Line numbers"
               description="Show line numbers in the gutter"
             >
-              <Switch checked={lineNumbers} onCheckedChange={setLineNumbers} />
+              <Switch
+                checked={showLineNumbers}
+                onCheckedChange={onShowLineNumbersChange}
+              />
             </SettingRow>
             <SettingRow
               icon={Type}
@@ -159,11 +208,11 @@ const SettingsDialog = ({
             <SettingRow
               icon={Palette}
               label="Color theme"
-              description="Choose the overall color scheme"
+              description="Choose light, dark, or system mode"
             >
               <RadioGroup
-                value={theme}
-                onValueChange={setTheme}
+                value={themeSettings.mode}
+                onValueChange={handleThemeModeChange}
                 className="flex gap-2"
               >
                 {['light', 'dark', 'system'].map((t) => (
@@ -181,34 +230,100 @@ const SettingsDialog = ({
             </SettingRow>
             <SettingRow
               icon={Palette}
-              label="Accent color"
-              description="Primary accent color for UI elements"
-            >
-              <RadioGroup
-                value={accentColor}
-                onValueChange={setAccentColor}
-                className="flex gap-2"
-              >
-                {['blue', 'green', 'purple', 'orange'].map((c) => (
-                  <div key={c} className="flex items-center gap-1">
-                    <RadioGroupItem value={c} id={`accent-${c}`} />
-                    <Label
-                      htmlFor={`accent-${c}`}
-                      className="text-xs text-muted-foreground cursor-pointer capitalize"
-                    >
-                      {c}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-            </SettingRow>
-            <SettingRow
-              icon={Palette}
               label="Compact mode"
               description="Reduce padding and margins throughout the UI"
             >
               <Switch checked={compactMode} onCheckedChange={setCompactMode} />
             </SettingRow>
+            <Separator className="bg-sidebar-border" />
+            <SectionHeader title="Templates" />
+            <p className="text-xs text-muted-foreground mb-2">
+              Click a template to apply it instantly.
+            </p>
+            <div className="grid grid-cols-2 gap-2 pb-2">
+              {Object.entries(themeTemplates).map(([name, json]) => {
+                const parsed = JSON.parse(json) as {
+                  variables?: {
+                    dark?: { primary?: string; background?: string };
+                  };
+                };
+                const previewPrimary =
+                  parsed.variables?.dark?.primary ?? 'var(--primary)';
+                const previewBg =
+                  parsed.variables?.dark?.background ?? 'var(--card)';
+                return (
+                  <button
+                    key={name}
+                    onClick={() => {
+                      const settings = parseThemeSettingsJson(json);
+                      onThemeSettingsChange(settings);
+                      setThemeJsonText(json);
+                      setThemeJsonError(null);
+                    }}
+                    className={cn(
+                      'group flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                      'border-sidebar-border hover:border-primary/40 hover:bg-muted/50'
+                    )}
+                  >
+                    <div
+                      className="size-8 shrink-0 rounded-md border border-border/40 shadow-sm"
+                      style={{
+                        background: `linear-gradient(135deg, ${previewPrimary} 40%, ${previewBg} 100%)`,
+                      }}
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-foreground">
+                        {name}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <Separator className="bg-sidebar-border" />
+            <div className="space-y-2 py-2">
+              <Label className="text-sm text-foreground">Theme JSON</Label>
+              <p className="text-xs text-muted-foreground">
+                Override CSS variables for light and dark modes. Use keys like
+                <code className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[11px]">
+                  background
+                </code>{' '}
+                or
+                <code className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[11px]">
+                  --background
+                </code>
+                .
+              </p>
+              <div className="h-72 overflow-hidden rounded-md border border-sidebar-border bg-card focus-within:ring-2 focus-within:ring-ring">
+                <JsonCodeEditor
+                  value={themeJsonText}
+                  onChange={setThemeJsonText}
+                  isDark={isDarkTheme}
+                  className="h-full w-full overflow-hidden [&_.cm-editor]:h-full [&_.cm-editor]:outline-none [&_.cm-scroller]:overflow-auto"
+                />
+              </div>
+              {themeJsonError ? (
+                <p className="text-xs text-destructive">{themeJsonError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Tip: color tokens used across the app include `background`,
+                  `foreground`, `primary`, `muted`, `border`, `sidebar`, and
+                  `sidebar-foreground`.
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button size="sm" onClick={handleApplyThemeJson}>
+                  Apply JSON
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleResetThemeJson}
+                >
+                  Reset Editor
+                </Button>
+              </div>
+            </div>
           </div>
         );
       case 'display':
@@ -378,11 +493,11 @@ const SettingsDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl h-[520px] p-0 bg-sidebar border-sidebar-border overflow-hidden">
+      <DialogContent className="sm:max-w-3xl h-130 max-h-[85vh] p-0 bg-sidebar border-sidebar-border overflow-hidden">
         <DialogTitle className="sr-only">Settings</DialogTitle>
-        <div className="flex h-full">
+        <div className="flex h-full min-h-0">
           {/* Sidebar */}
-          <div className="w-48 shrink-0 border-r border-sidebar-border p-3 space-y-1">
+          <div className="w-48 shrink-0 border-r border-sidebar-border p-3 space-y-1 overflow-y-auto">
             <h2 className="text-sm font-semibold text-foreground px-2 py-1.5 mb-2">
               Settings
             </h2>
@@ -404,7 +519,7 @@ const SettingsDialog = ({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 min-h-0 overflow-y-auto p-6 overscroll-contain">
             <h2 className="text-base font-semibold text-foreground mb-4 capitalize">
               {activeSection}
             </h2>

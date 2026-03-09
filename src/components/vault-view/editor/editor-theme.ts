@@ -3,12 +3,12 @@ import { EditorView } from '@codemirror/view';
 export const lightTheme = EditorView.theme(
   {
     '&': {
-      backgroundColor: 'hsl(0 0% 100%)',
-      color: 'hsl(222.2 84% 4.9%)',
+      backgroundColor: 'var(--background)',
+      color: 'var(--foreground)',
       height: '100%',
     },
     '.cm-content': {
-      caretColor: 'hsl(222.2 84% 4.9%)',
+      caretColor: 'var(--foreground)',
       fontFamily:
         "'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace",
       fontSize: '14px',
@@ -16,32 +16,34 @@ export const lightTheme = EditorView.theme(
       padding: '16px 0',
     },
     '.cm-cursor': {
-      borderLeftColor: 'hsl(222.2 84% 4.9%)',
+      borderLeftColor: 'var(--foreground)',
       borderLeftWidth: '2px',
     },
     '.cm-gutters': {
-      backgroundColor: 'hsl(210 40% 98%)',
-      color: 'hsl(215.4 16.3% 66.9%)',
+      backgroundColor: 'var(--card)',
+      color: 'var(--muted-foreground)',
       border: 'none',
       fontFamily: "'JetBrains Mono', monospace",
       fontSize: '12px',
       minWidth: '3.5em',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: 'hsl(210 40% 94%)',
-      color: 'hsl(222.2 47.4% 11.2%)',
+      backgroundColor: 'color-mix(in oklab, var(--muted) 70%, transparent)',
+      color: 'var(--foreground)',
     },
     '.cm-activeLine': {
-      backgroundColor: 'hsl(210 40% 97%)',
+      backgroundColor: 'color-mix(in oklab, var(--muted) 50%, transparent)',
     },
     '.cm-selectionBackground': {
-      backgroundColor: 'hsl(222.2 47.4% 11.2% / 0.12) !important',
+      backgroundColor:
+        'color-mix(in oklab, var(--ring) 15%, transparent) !important',
     },
     '&.cm-focused .cm-selectionBackground': {
-      backgroundColor: 'hsl(222.2 47.4% 11.2% / 0.15) !important',
+      backgroundColor:
+        'color-mix(in oklab, var(--ring) 20%, transparent) !important',
     },
     '.cm-line': {
-      padding: '0 16px',
+      padding: '0 32px',
     },
     // WYSIWYG styles
     '.cm-wysiwyg-bold': {
@@ -123,12 +125,12 @@ export const lightTheme = EditorView.theme(
 export const darkTheme = EditorView.theme(
   {
     '&': {
-      backgroundColor: 'hsl(222.2 84% 4.9%)',
-      color: 'hsl(210 40% 98%)',
+      backgroundColor: 'var(--background)',
+      color: 'var(--foreground)',
       height: '100%',
     },
     '.cm-content': {
-      caretColor: 'hsl(210 40% 98%)',
+      caretColor: 'var(--foreground)',
       fontFamily:
         "'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace",
       fontSize: '14px',
@@ -136,32 +138,34 @@ export const darkTheme = EditorView.theme(
       padding: '16px 0',
     },
     '.cm-cursor': {
-      borderLeftColor: 'hsl(210 40% 98%)',
+      borderLeftColor: 'var(--foreground)',
       borderLeftWidth: '2px',
     },
     '.cm-gutters': {
-      backgroundColor: 'hsl(222.2 84% 6.5%)',
-      color: 'hsl(215 20.2% 45.1%)',
+      backgroundColor: 'var(--card)',
+      color: 'var(--muted-foreground)',
       border: 'none',
       fontFamily: "'JetBrains Mono', monospace",
       fontSize: '12px',
       minWidth: '3.5em',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: 'hsl(217.2 32.6% 12.5%)',
-      color: 'hsl(210 40% 85%)',
+      backgroundColor: 'color-mix(in oklab, var(--muted) 65%, transparent)',
+      color: 'var(--foreground)',
     },
     '.cm-activeLine': {
-      backgroundColor: 'hsl(217.2 32.6% 8%)',
+      backgroundColor: 'color-mix(in oklab, var(--muted) 45%, transparent)',
     },
     '.cm-selectionBackground': {
-      backgroundColor: 'hsl(210 40% 98% / 0.1) !important',
+      backgroundColor:
+        'color-mix(in oklab, var(--ring) 12%, transparent) !important',
     },
     '&.cm-focused .cm-selectionBackground': {
-      backgroundColor: 'hsl(210 40% 98% / 0.15) !important',
+      backgroundColor:
+        'color-mix(in oklab, var(--ring) 18%, transparent) !important',
     },
     '.cm-line': {
-      padding: '0 16px',
+      padding: '0 32px',
     },
     // WYSIWYG styles
     '.cm-wysiwyg-bold': {
