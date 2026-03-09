@@ -26,6 +26,7 @@ const Index = ({
   themeTemplates,
 }: VaultViewProps) => {
   const {
+    folder,
     fileTree,
     openFiles,
     activeFileId,
@@ -156,9 +157,12 @@ const Index = ({
     [activeFileId, updateFileContent]
   );
 
+  const folderName =
+    fileTree.length > 0 ? folder?.split(/[\\/]/).pop() || 'Vault' : 'Vault';
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-sidebar">
-      <TitleBar />
+      <TitleBar folderName={folderName} />
       <div className="flex flex-1 overflow-hidden">
         <IconSidebar
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}

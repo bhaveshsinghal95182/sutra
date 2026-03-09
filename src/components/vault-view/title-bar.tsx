@@ -1,7 +1,11 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Github, Minus, Square, X } from 'lucide-react';
 
-const TitleBar = () => {
+interface TitleBarProps {
+  folderName?: string;
+}
+
+const TitleBar = ({ folderName = 'Vault' }: TitleBarProps) => {
   const appWindow = getCurrentWindow();
 
   return (
@@ -12,11 +16,11 @@ const TitleBar = () => {
       <div className="flex items-center gap-2">
         <div className="flex size-5 items-center justify-center rounded bg-sidebar-primary">
           <span className="text-[10px] font-bold text-sidebar-primary-foreground">
-            V
+            {folderName.charAt(0).toUpperCase()}
           </span>
         </div>
         <span className="text-xs font-semibold text-sidebar-foreground">
-          Vault
+          {folderName}
         </span>
       </div>
 
