@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import MarkdownEditor from '@/components/vault-view/editor/markdown-editor';
+import MarkdownPreview from '@/components/vault-view/editor/markdown-preview';
 import EditorTabs from '@/components/vault-view/editor-tabs';
 import GraphView from '@/components/vault-view/graph-view';
 import IconSidebar from '@/components/vault-view/icon-sidebar';
 import MainSidebar from '@/components/vault-view/main-sidebar';
-import MarkdownEditor, {
-  HIGHLIGHT_DURATION,
-} from '@/components/vault-view/markdown-editor';
 import RightSidebar from '@/components/vault-view/right-sidebar';
 import SettingsDialog from '@/components/vault-view/settings-dialog';
 import TitleBar from '@/components/vault-view/title-bar';
@@ -31,38 +30,59 @@ const Index = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [vimMode, setVimMode] = useState(false);
-  const [highlightedSection, setHighlightedSection] = useState<{
-    start: number;
-    end: number;
-  } | null>(null);
-  const highlightTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [isDark, setIsDark] = useState(
+    () =>
+      typeof document !== 'undefined' &&
+      document.documentElement.classList.contains('dark')
+  );
   const [activeHeadingIndex, setActiveHeadingIndex] = useState<number>(0);
   const visibleHeadingsRef = useRef<Set<number>>(new Set());
-  const editorScrollRef = useRef<HTMLDivElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
 
   /* ── Derived state ── */
   const activeFile = openFiles.find((f) => f.id === activeFileId);
   const activeContent = activeFile?.content ?? '';
 
+  // Keep CodeMirror theme in sync with the app's dark class.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      setIsDark(root.classList.contains('dark'));
+    });
+
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   /* ── Track which heading is currently visible via IntersectionObserver ── */
   useEffect(() => {
+    if (!previewMode) return;
+
     const headings = extractHeadings(activeContent);
     if (headings.length === 0) return;
-    const scrollRoot = editorScrollRef.current;
+    const scrollRoot = previewContainerRef.current;
     if (!scrollRoot) return;
 
+    const headingEls = Array.from(
+      scrollRoot.querySelectorAll('h1, h2, h3, h4, h5, h6')
+    ) as HTMLElement[];
+    if (headingEls.length === 0) return;
+
     visibleHeadingsRef.current.clear();
+    const headingIndexMap = new Map<Element, number>();
+    headingEls.forEach((el, idx) => headingIndexMap.set(el, idx));
 
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          const id = entry.target.id;
-          const match = id.match(/^heading-(\d+)$/);
-          if (!match) continue;
-
-          const lineIdx = parseInt(match[1], 10);
-          const hIdx = headings.findIndex((h) => h.lineIndex === lineIdx);
-          if (hIdx < 0) continue;
+          const hIdx = headingIndexMap.get(entry.target);
+          if (hIdx === undefined || hIdx < 0) continue;
 
           if (entry.isIntersecting) {
             visibleHeadingsRef.current.add(hIdx);
@@ -78,36 +98,30 @@ const Index = () => {
       { root: scrollRoot, threshold: 0 }
     );
 
-    const els = headings
-      .map((h) => document.getElementById(`heading-${h.lineIndex}`))
-      .filter(Boolean) as HTMLElement[];
-    els.forEach((el) => observer.observe(el));
+    headingEls.forEach((el) => observer.observe(el));
 
     return () => observer.disconnect();
   }, [activeContent, previewMode]);
 
   const handleHeadingClick = useCallback(
     (lineIndex: number) => {
-      const contentLines = activeContent.split('\n');
-      const headingMatch = contentLines[lineIndex]?.match(/^(#{1,6})\s/);
-      if (!headingMatch) return;
-      const headLevel = headingMatch[1].length;
-      let end = contentLines.length - 1;
-      for (let i = lineIndex + 1; i < contentLines.length; i++) {
-        const m = contentLines[i].match(/^(#{1,6})\s/);
-        if (m && m[1].length <= headLevel) {
-          end = i - 1;
-          break;
-        }
+      if (!previewMode) return;
+
+      const headings = extractHeadings(activeContent);
+      const headingIdx = headings.findIndex((h) => h.lineIndex === lineIndex);
+      if (headingIdx < 0) return;
+
+      const scrollRoot = previewContainerRef.current;
+      if (!scrollRoot) return;
+
+      const headingEls = scrollRoot.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      const target = headingEls[headingIdx] as HTMLElement | undefined;
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setActiveHeadingIndex(headingIdx);
       }
-      setHighlightedSection({ start: lineIndex, end });
-      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-      highlightTimerRef.current = setTimeout(
-        () => setHighlightedSection(null),
-        HIGHLIGHT_DURATION
-      );
     },
-    [activeContent]
+    [activeContent, previewMode]
   );
 
   const handleFileSelect = useCallback(
@@ -115,73 +129,6 @@ const Index = () => {
       openFile(file);
     },
     [openFile]
-  );
-
-  const handleWikilinkClick = useCallback(
-    (target: string) => {
-      const hashIdx = target.indexOf('#');
-      const filePart =
-        hashIdx > 0 ? target.slice(0, hashIdx) : hashIdx === 0 ? null : target;
-      const headingPart = hashIdx >= 0 ? target.slice(hashIdx + 1) : null;
-
-      const scrollToHeading = (content: string, headingText: string) => {
-        const contentLines = content.split('\n');
-        for (let i = 0; i < contentLines.length; i++) {
-          const m = contentLines[i].match(/^#{1,6}\s+(.+)$/);
-          if (
-            m &&
-            m[1].trim().toLowerCase() === headingText.trim().toLowerCase()
-          ) {
-            handleHeadingClick(i);
-            const el = document.getElementById(`heading-${i}`);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            return;
-          }
-        }
-      };
-
-      if (filePart) {
-        // Search the file tree for a matching file by name
-        const findFile = (nodes: FileNode[]): FileNode | undefined => {
-          for (const node of nodes) {
-            if (node.type === 'file') {
-              const targetName = filePart.endsWith('.md')
-                ? filePart
-                : filePart + '.md';
-              if (
-                node.name.toLowerCase() === targetName.toLowerCase() ||
-                node.name.replace(/\.md$/, '').toLowerCase() ===
-                  filePart.toLowerCase()
-              ) {
-                return node;
-              }
-            }
-            if (node.children) {
-              const found = findFile(node.children);
-              if (found) return found;
-            }
-          }
-          return undefined;
-        };
-
-        const file = findFile(fileTree);
-        if (file) {
-          handleFileSelect(file);
-          // After opening, scroll to heading if requested
-          if (headingPart) {
-            setTimeout(() => {
-              const opened = useFolderStore
-                .getState()
-                .openFiles.find((f) => f.id === file.id);
-              if (opened) scrollToHeading(opened.content, headingPart);
-            }, 100);
-          }
-        }
-      } else if (headingPart) {
-        scrollToHeading(activeContent, headingPart);
-      }
-    },
-    [activeContent, handleHeadingClick, handleFileSelect, fileTree]
   );
 
   const handleCloseTab = useCallback(
@@ -258,14 +205,23 @@ const Index = () => {
                 }}
               />
             ) : openFiles.length > 0 && activeFile ? (
-              <MarkdownEditor
-                ref={editorScrollRef}
-                content={activeContent}
-                onChange={handleContentChange}
-                previewMode={previewMode}
-                highlightedSection={highlightedSection}
-                onWikilinkClick={handleWikilinkClick}
-              />
+              previewMode ? (
+                <div
+                  ref={previewContainerRef}
+                  className="h-full overflow-hidden"
+                >
+                  <MarkdownPreview content={activeContent} />
+                </div>
+              ) : (
+                <MarkdownEditor
+                  content={activeContent}
+                  isDark={isDark}
+                  showLineNumbers={true}
+                  showRelativeNumbers={false}
+                  vimMode={vimMode}
+                  onContentChange={handleContentChange}
+                />
+              )
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                 Open a file to start editing
