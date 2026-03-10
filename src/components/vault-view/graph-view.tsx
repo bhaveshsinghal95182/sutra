@@ -1,7 +1,6 @@
+import { readTextFile } from '@tauri-apps/plugin-fs';
 import * as d3 from 'd3';
-import { useEffect, useRef } from 'react';
-
-import graphData from '@/lib/graph-data.json';
+import { useEffect, useRef, useState } from 'react';
 
 interface GraphNode extends d3.SimulationNodeDatum {
   id: string;
@@ -15,17 +14,60 @@ interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
   target: string | GraphNode;
 }
 
+interface GraphData {
+  nodes: Array<{
+    id: string;
+    name: string;
+    fileId: string;
+  }>;
+  links: Array<{
+    source: string;
+    target: string;
+  }>;
+}
+
 interface GraphViewProps {
   activeFileId: string;
   onFileSelect: (fileId: string) => void;
+  folderPath?: string;
 }
 
-const GraphView = ({ activeFileId, onFileSelect }: GraphViewProps) => {
+const GraphView = ({
+  activeFileId,
+  onFileSelect,
+  folderPath,
+}: GraphViewProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [graphData, setGraphData] = useState<GraphData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Load graph data from .sutra/graph-data.json
+  useEffect(() => {
+    const loadGraphData = async () => {
+      if (!folderPath) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const graphDataPath = `${folderPath}/.sutra/graph-data.json`;
+        const content = await readTextFile(graphDataPath);
+        const data: GraphData = JSON.parse(content);
+        setGraphData(data);
+      } catch (error) {
+        console.error('Failed to load graph data:', error);
+        setGraphData(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadGraphData();
+  }, [folderPath]);
 
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current) return;
+    if (!svgRef.current || !containerRef.current || !graphData) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
@@ -36,17 +78,25 @@ const GraphView = ({ activeFileId, onFileSelect }: GraphViewProps) => {
 
     // Compute link counts
     const linkCount: Record<string, number> = {};
-    graphData.nodes.forEach((n) => (linkCount[n.id] = 0));
-    graphData.links.forEach((l) => {
-      linkCount[l.source] = (linkCount[l.source] || 0) + 1;
-      linkCount[l.target] = (linkCount[l.target] || 0) + 1;
-    });
-
     const nodes: GraphNode[] = graphData.nodes.map((n) => ({
       ...n,
-      linkCount: linkCount[n.id] || 0,
+      linkCount: 0,
     }));
     const links: GraphLink[] = graphData.links.map((l) => ({ ...l }));
+
+    // Calculate link counts
+    nodes.forEach((n) => (linkCount[n.id] = 0));
+    links.forEach((l) => {
+      const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
+      const targetId = typeof l.target === 'string' ? l.target : l.target.id;
+      linkCount[sourceId] = (linkCount[sourceId] || 0) + 1;
+      linkCount[targetId] = (linkCount[targetId] || 0) + 1;
+    });
+
+    // Update nodes with link counts
+    nodes.forEach((n) => {
+      n.linkCount = linkCount[n.id] || 0;
+    });
 
     const g = svg.append('g');
 
@@ -236,7 +286,23 @@ const GraphView = ({ activeFileId, onFileSelect }: GraphViewProps) => {
       simulation.stop();
       resizeObs.disconnect();
     };
-  }, [activeFileId, onFileSelect]);
+  }, [activeFileId, onFileSelect, graphData]);
+
+  if (loading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+        Loading graph...
+      </div>
+    );
+  }
+
+  if (!graphData || graphData.nodes.length === 0) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+        No graph data found. Add links to your files to see the graph.
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="h-full w-full">

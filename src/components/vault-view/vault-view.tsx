@@ -40,7 +40,7 @@ const Index = ({
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [graphOpen, setGraphOpen] = useState(false);
+  const [graphTabOpen, setGraphTabOpen] = useState(false);
   const [vimMode, setVimMode] = useState(false);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
   const [systemDark, setSystemDark] = useState(
@@ -134,6 +134,21 @@ const Index = ({
     [activeContent, previewMode]
   );
 
+  const isGraphActive = activeFileId === '__graph__';
+
+  const handleOpenGraph = useCallback(() => {
+    setGraphTabOpen(true);
+    setActiveFileId('__graph__');
+  }, [setActiveFileId]);
+
+  const handleCloseGraph = useCallback(() => {
+    setGraphTabOpen(false);
+    // Switch to the last open file tab, or null
+    const lastFile =
+      openFiles.length > 0 ? openFiles[openFiles.length - 1] : null;
+    setActiveFileId(lastFile ? lastFile.id : (null as unknown as string));
+  }, [openFiles, setActiveFileId]);
+
   const handleFileSelect = useCallback(
     (file: FileNode) => {
       openFile(file);
@@ -170,7 +185,7 @@ const Index = ({
           onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
           rightSidebarOpen={rightSidebarOpen}
           onOpenSettings={() => setSettingsOpen(true)}
-          onOpenGraph={() => setGraphOpen(true)}
+          onOpenGraph={handleOpenGraph}
         />
         <MainSidebar
           open={sidebarOpen}
@@ -189,14 +204,16 @@ const Index = ({
               onCloseTab={handleCloseTab}
               previewMode={previewMode}
               onTogglePreviewMode={
-                graphOpen ? undefined : () => setPreviewMode(!previewMode)
+                isGraphActive ? undefined : () => setPreviewMode(!previewMode)
               }
-              graphOpen={graphOpen}
-              onCloseGraph={() => setGraphOpen(false)}
+              graphTabOpen={graphTabOpen}
+              onSelectGraph={handleOpenGraph}
+              onCloseGraph={handleCloseGraph}
             />
-            {graphOpen ? (
+            {isGraphActive && graphTabOpen ? (
               <GraphView
                 activeFileId={activeFileId ?? ''}
+                folderPath={folder ?? undefined}
                 onFileSelect={(fileId) => {
                   const findFileById = (nodes: FileNode[]): FileNode | null => {
                     for (const node of nodes) {
@@ -213,7 +230,6 @@ const Index = ({
                   const file = findFileById(fileTree);
                   if (file) {
                     handleFileSelect(file);
-                    setGraphOpen(false);
                   }
                 }}
               />

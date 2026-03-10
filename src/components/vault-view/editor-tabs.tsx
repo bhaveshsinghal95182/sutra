@@ -10,7 +10,8 @@ interface EditorTabsProps {
   onCloseTab: (id: string) => void;
   previewMode?: boolean;
   onTogglePreviewMode?: () => void;
-  graphOpen?: boolean;
+  graphTabOpen?: boolean;
+  onSelectGraph?: () => void;
   onCloseGraph?: () => void;
 }
 
@@ -21,37 +22,18 @@ const EditorTabs = ({
   onCloseTab,
   previewMode,
   onTogglePreviewMode,
-  graphOpen,
+  graphTabOpen,
+  onSelectGraph,
   onCloseGraph,
 }: EditorTabsProps) => {
-  if (openFiles.length === 0 && !graphOpen) return null;
+  if (openFiles.length === 0 && !graphTabOpen) return null;
+
+  const isGraphActive = activeFileId === '__graph__';
 
   return (
     <div className="relative flex h-9 items-end border-b border-border/50 bg-sidebar/50">
       {/* Scrollable tabs area */}
       <div className="flex flex-1 items-end gap-0 overflow-x-auto scrollbar-none px-1 pr-10">
-        {graphOpen && (
-          <button
-            className={cn(
-              'group relative flex h-8 shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-3 text-xs transition-colors',
-              !activeFileId
-                ? 'border-border/50 bg-card text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <GitGraph size={12} />
-            <span>Graph View</span>
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloseGraph?.();
-              }}
-              className="flex size-4 items-center justify-center rounded opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
-            >
-              <X size={10} />
-            </span>
-          </button>
-        )}
         {openFiles.map((file) => (
           <button
             key={file.id}
@@ -75,6 +57,29 @@ const EditorTabs = ({
             </span>
           </button>
         ))}
+        {graphTabOpen && (
+          <button
+            onClick={() => onSelectGraph?.()}
+            className={cn(
+              'group relative flex h-8 shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-3 text-xs transition-colors',
+              isGraphActive
+                ? 'border-border/50 bg-card text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <GitGraph size={12} />
+            <span>Graph View</span>
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                onCloseGraph?.();
+              }}
+              className="flex size-4 items-center justify-center rounded opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+            >
+              <X size={10} />
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Fade + fixed toggle */}

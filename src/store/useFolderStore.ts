@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { join } from '@tauri-apps/api/path';
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs';
 import { create } from 'zustand';
@@ -80,6 +81,16 @@ export const useFolderStore = create<FolderState>((set, get) => ({
         activeFileId: null,
         loading: false,
       });
+
+      // Generate graph data and save to .sutra folder
+      try {
+        const result = await invoke<string>('generate_and_save_graph', {
+          folderPath: path,
+        });
+        console.log('Graph data generated:', result);
+      } catch (e) {
+        console.error('Failed to generate graph data', e);
+      }
     } catch (e) {
       console.error('Failed to load folder', e);
       set({ loading: false });
