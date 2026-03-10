@@ -14,8 +14,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
-            commands::file::some_command,
-            commands::file::generate_and_save_graph
+            commands::graph::generate_and_save_graph
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,10 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
-pub fn some_command() {
-    println!("some_command");
-}
-
 #[derive(Debug, Clone)]
 pub struct GraphNode {
     pub id: String,
