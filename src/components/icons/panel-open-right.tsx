@@ -1,0 +1,26 @@
+import { type LucideProps } from 'lucide-react';
+import { forwardRef } from 'react';
+
+export const PanelOpenRight = forwardRef<SVGSVGElement, LucideProps>(
+  ({ color = 'currentColor', size = 24, className, ...props }, ref) => {
+    return (
+      <svg
+        ref={ref}
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 32 32"
+        fill={color}
+        className={className}
+        {...props}
+      >
+        <title>open-panel--solid--right</title>
+        <path d="M28,4H4A2,2,0,0,0,2,6V26a2,2,0,0,0,2,2H28a2,2,0,0,0,2-2V6A2,2,0,0,0,28,4ZM4,6H20V26H4Z" />
+      </svg>
+    );
+  }
+);
+
+PanelOpenRight.displayName = 'PanelOpenRight';
+
+export default PanelOpenRight;

@@ -1,11 +1,21 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Github, Minus, Square, X } from 'lucide-react';
+import { Github, Minus, PanelRightIcon, Square, X } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
+
+import PanelOpenRight from '../icons/panel-open-right';
 
 interface TitleBarProps {
   folderName?: string;
+  onToggleRightSidebar?: () => void;
+  rightSidebarOpen?: boolean;
 }
 
-const TitleBar = ({ folderName = 'Vault' }: TitleBarProps) => {
+const TitleBar = ({
+  folderName = 'Vault',
+  onToggleRightSidebar,
+  rightSidebarOpen,
+}: TitleBarProps) => {
   const appWindow = getCurrentWindow();
 
   return (
@@ -40,6 +50,19 @@ const TitleBar = ({ folderName = 'Vault' }: TitleBarProps) => {
         className="flex items-center"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
+        <button
+          onClick={onToggleRightSidebar}
+          title="Toggle Right Sidebar"
+          className={cn(
+            'flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground'
+          )}
+        >
+          {rightSidebarOpen ? (
+            <PanelOpenRight size={18} />
+          ) : (
+            <PanelRightIcon size={18} />
+          )}
+        </button>
         <button
           onClick={() => appWindow.minimize()}
           className="flex size-8 items-center justify-center text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"

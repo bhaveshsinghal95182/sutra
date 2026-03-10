@@ -1,19 +1,12 @@
-import {
-  GitGraph,
-  PanelLeft,
-  PanelRight,
-  Search,
-  Settings,
-  Star,
-} from 'lucide-react';
+import { GitGraph, PanelLeft, Search, Settings, Star } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+
+import PanelOpenLeft from '../icons/panel-open-left';
 
 interface IconSidebarProps {
   onToggleSidebar: () => void;
   sidebarOpen: boolean;
-  onToggleRightSidebar: () => void;
-  rightSidebarOpen: boolean;
   onOpenSettings: () => void;
   onOpenGraph: () => void;
 }
@@ -21,24 +14,10 @@ interface IconSidebarProps {
 const IconSidebar = ({
   onToggleSidebar,
   sidebarOpen,
-  onToggleRightSidebar,
-  rightSidebarOpen,
   onOpenSettings,
   onOpenGraph,
 }: IconSidebarProps) => {
   const icons = [
-    {
-      icon: PanelLeft,
-      label: 'Toggle sidebar',
-      onClick: onToggleSidebar,
-      active: sidebarOpen,
-    },
-    {
-      icon: PanelRight,
-      label: 'Toggle outline',
-      onClick: onToggleRightSidebar,
-      active: rightSidebarOpen,
-    },
     { icon: GitGraph, label: 'Graph view', onClick: onOpenGraph || (() => {}) },
     { icon: Search, label: 'Search', onClick: () => {} },
     { icon: Star, label: 'Starred', onClick: () => {} },
@@ -46,14 +25,22 @@ const IconSidebar = ({
 
   return (
     <div className="flex w-12 flex-col items-center border-r border-sidebar-border bg-sidebar py-2 gap-1">
-      {icons.map(({ icon: Icon, label, onClick, active }) => (
+      <button
+        onClick={onToggleSidebar}
+        title="Toggle Right Sidebar"
+        className={cn(
+          'flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground'
+        )}
+      >
+        {sidebarOpen ? <PanelOpenLeft size={18} /> : <PanelLeft size={18} />}
+      </button>
+      {icons.map(({ icon: Icon, label, onClick }) => (
         <button
           key={label}
           onClick={onClick}
           title={label}
           className={cn(
-            'flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
-            active && 'bg-sidebar-accent text-sidebar-foreground'
+            'flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground'
           )}
         >
           <Icon size={18} />

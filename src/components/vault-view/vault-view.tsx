@@ -177,13 +177,15 @@ const Index = ({
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-sidebar">
-      <TitleBar folderName={folderName} />
+      <TitleBar
+        folderName={folderName}
+        onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
+        rightSidebarOpen={rightSidebarOpen}
+      />
       <div className="flex flex-1 overflow-hidden">
         <IconSidebar
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           sidebarOpen={sidebarOpen}
-          onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
-          rightSidebarOpen={rightSidebarOpen}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenGraph={handleOpenGraph}
         />
