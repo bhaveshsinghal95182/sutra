@@ -3,6 +3,7 @@ import { join } from '@tauri-apps/api/path';
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs';
 import { create } from 'zustand';
 
+import { FsWatcher } from '@/lib/fs-crud';
 import type { FileNode, OpenFile } from '@/lib/types';
 
 /**
@@ -54,13 +55,15 @@ interface FolderState {
   openFiles: OpenFile[];
   activeFileId: string | null;
   loading: boolean;
+  watcher: FsWatcher | null;
 
   loadFolder: (path: string) => Promise<void>;
+  refreshTree: () => Promise<void>;
   openFile: (node: FileNode) => Promise<void>;
   closeFile: (id: string) => void;
   setActiveFileId: (id: string) => void;
   updateFileContent: (id: string, content: string) => void;
-  clearFolder: () => void;
+  clearFolder: () => Promise<void>;
 }
 
 export const useFolderStore = create<FolderState>((set, get) => ({
@@ -69,8 +72,15 @@ export const useFolderStore = create<FolderState>((set, get) => ({
   openFiles: [],
   activeFileId: null,
   loading: false,
+  watcher: null,
 
   loadFolder: async (path: string) => {
+    // Stop existing watcher if any
+    const { watcher } = get();
+    if (watcher) {
+      await watcher.stop();
+    }
+
     set({ loading: true });
     try {
       const tree = await buildTree(path);
@@ -84,16 +94,62 @@ export const useFolderStore = create<FolderState>((set, get) => ({
 
       // Generate graph data and save to .sutra folder
       try {
-        const result = await invoke<string>('generate_and_save_graph', {
+        await invoke<string>('generate_and_save_graph', {
           folderPath: path,
         });
-        console.log('Graph data generated:', result);
       } catch (e) {
-        console.error('Failed to generate graph data', e);
+        console.error('[Graph] Failed to generate graph data', e);
       }
+
+      // Start filesystem watcher with callbacks that always use latest store state
+      const newWatcher = new FsWatcher(
+        path,
+        {
+          onCreate: () => {
+            const store = get();
+            store.refreshTree().catch((err) => {
+              console.error('[FsWatcher] Refresh failed:', err);
+            });
+          },
+          onModify: () => {
+            // No tree structure change for modifications
+          },
+          onRemove: () => {
+            const store = get();
+            store.refreshTree().catch((err) => {
+              console.error('[FsWatcher] Refresh failed:', err);
+            });
+          },
+          onRename: () => {
+            const store = get();
+            store.refreshTree().catch((err) => {
+              console.error('[FsWatcher] Refresh failed:', err);
+            });
+          },
+        },
+        {
+          recursive: true,
+          debounceMs: 150, // Debounce burst events
+        }
+      );
+
+      await newWatcher.start();
+      set({ watcher: newWatcher });
     } catch (e) {
-      console.error('Failed to load folder', e);
+      console.error('[FsWatcher] Failed to load folder:', e);
       set({ loading: false });
+    }
+  },
+
+  refreshTree: async () => {
+    const { folder } = get();
+    if (!folder) return;
+
+    try {
+      const tree = await buildTree(folder);
+      set({ fileTree: tree });
+    } catch (e) {
+      console.error('[FsWatcher] Failed to refresh tree:', e);
     }
   },
 
@@ -142,6 +198,17 @@ export const useFolderStore = create<FolderState>((set, get) => ({
     }));
   },
 
-  clearFolder: () =>
-    set({ folder: null, fileTree: [], openFiles: [], activeFileId: null }),
+  clearFolder: async () => {
+    const { watcher } = get();
+    if (watcher) {
+      await watcher.stop();
+    }
+    set({
+      folder: null,
+      fileTree: [],
+      openFiles: [],
+      activeFileId: null,
+      watcher: null,
+    });
+  },
 }));
