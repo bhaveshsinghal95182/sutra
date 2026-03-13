@@ -17,9 +17,13 @@
     "opener:default",
     "dialog:default",
     "fs:default",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
     "fs:allow-read-text-file",
     "fs:allow-read-dir",
     "fs:allow-watch",
+    "fs:allow-rename",
+    "fs:allow-remove",
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "**" }]

@@ -118,6 +118,17 @@ export const fsCrud = {
       });
     },
 
+    async rename(
+      oldPath: FsPath,
+      newPath: FsPath,
+      options: { oldBaseDir?: BaseDirectory; newBaseDir?: BaseDirectory } = {}
+    ): Promise<void> {
+      await rename(oldPath, newPath, {
+        oldPathBaseDir: options.oldBaseDir,
+        newPathBaseDir: options.newBaseDir,
+      });
+    },
+
     async remove(path: FsPath, options: BasePathOptions = {}): Promise<void> {
       await remove(path, { baseDir: options.baseDir });
     },

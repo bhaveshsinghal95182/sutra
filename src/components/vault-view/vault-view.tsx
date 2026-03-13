@@ -1,3 +1,4 @@
+import { join } from '@tauri-apps/api/path';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import MarkdownEditor from '@/components/vault-view/editor/markdown-editor';
@@ -9,6 +10,7 @@ import MainSidebar from '@/components/vault-view/main-sidebar';
 import RightSidebar from '@/components/vault-view/right-sidebar';
 import SettingsDialog from '@/components/vault-view/settings-dialog';
 import TitleBar from '@/components/vault-view/title-bar';
+import { fsCrud } from '@/lib/fs-crud';
 import type { ThemeSettings } from '@/lib/theme-settings';
 import type { FileNode } from '@/lib/types';
 import { extractHeadings } from '@/lib/types';
@@ -32,6 +34,7 @@ const Index = ({
     activeFileId,
     openFile,
     closeFile,
+    refreshTree,
     setActiveFileId,
     updateFileContent,
   } = useFolderStore();
@@ -43,6 +46,7 @@ const Index = ({
   const [graphTabOpen, setGraphTabOpen] = useState(false);
   const [vimMode, setVimMode] = useState(false);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
+  const [collapseSignal, setCollapseSignal] = useState(0);
   const [systemDark, setSystemDark] = useState(
     () =>
       typeof window !== 'undefined' &&
@@ -57,6 +61,7 @@ const Index = ({
   const [activeHeadingIndex, setActiveHeadingIndex] = useState<number>(0);
   const visibleHeadingsRef = useRef<Set<number>>(new Set());
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const saveTimeoutRef = useRef<number | null>(null);
 
   /* ── Derived state ── */
   const activeFile = openFiles.find((f) => f.id === activeFileId);
@@ -163,14 +168,230 @@ const Index = ({
     [closeFile]
   );
 
+  const handleCreateFile = useCallback(
+    async (customPath?: string) => {
+      if (!folder || typeof customPath !== 'string' || !customPath.trim())
+        return;
+
+      const normalized = customPath
+        .trim()
+        .replace(/\\+/g, '/')
+        .replace(/^\/+|\/+$/g, '');
+      if (!normalized) return;
+
+      const segments = normalized.split('/').filter(Boolean);
+      if (segments.some((s) => s === '.' || s === '..')) {
+        window.alert('Relative segments like . and .. are not allowed.');
+        return;
+      }
+
+      try {
+        let filePath = folder;
+        for (const seg of segments) {
+          filePath = await join(filePath, seg);
+        }
+
+        if (segments.length > 1) {
+          let parentPath = folder;
+          for (const seg of segments.slice(0, -1)) {
+            parentPath = await join(parentPath, seg);
+          }
+          await fsCrud.folder.create(parentPath, { recursive: true });
+        }
+
+        await fsCrud.file.create(filePath, '');
+        await refreshTree();
+        openFile({
+          id: filePath,
+          name: segments[segments.length - 1],
+          type: 'file',
+        });
+      } catch (error) {
+        console.error('[Explorer] Failed to create file:', error);
+        window.alert('Failed to create file. It may already exist.');
+      }
+    },
+    [folder, refreshTree, openFile]
+  );
+
+  const handleCreateFolder = useCallback(
+    async (customPath?: string) => {
+      if (!folder || typeof customPath !== 'string' || !customPath.trim())
+        return;
+
+      const normalized = customPath
+        .trim()
+        .replace(/\\+/g, '/')
+        .replace(/^\/+|\/+$/g, '');
+      if (!normalized) return;
+
+      const segments = normalized.split('/').filter(Boolean);
+      if (segments.some((s) => s === '.' || s === '..')) {
+        window.alert('Relative segments like . and .. are not allowed.');
+        return;
+      }
+
+      try {
+        let folderPath = folder;
+        for (const seg of segments) {
+          folderPath = await join(folderPath, seg);
+        }
+        await fsCrud.folder.create(folderPath, { recursive: true });
+        await refreshTree();
+      } catch (error) {
+        console.error('[Explorer] Failed to create folder:', error);
+        window.alert('Failed to create folder.');
+      }
+    },
+    [folder, refreshTree]
+  );
+
+  const handleDeleteFile = useCallback(
+    async (node: FileNode) => {
+      if (!folder) return;
+      try {
+        if (node.type === 'folder') {
+          await fsCrud.folder.remove(node.id, { recursive: true });
+        } else {
+          await fsCrud.file.remove(node.id);
+        }
+        await refreshTree();
+      } catch (error) {
+        console.error('[Explorer] Failed to delete file:', error);
+        window.alert('Failed to delete file.');
+      }
+    },
+    [folder, refreshTree]
+  );
+
+  const handleRenameFile = useCallback(
+    async (node: FileNode, newName: string) => {
+      if (!folder || !newName.trim() || newName === node.name) return;
+      try {
+        const normalizedNodeId = node.id.replace(/\\/g, '/');
+        const dirPath = normalizedNodeId.substring(
+          0,
+          normalizedNodeId.lastIndexOf('/')
+        );
+        const newPath =
+          dirPath === normalizedNodeId || dirPath === ''
+            ? newName
+            : `${dirPath}/${newName}`;
+
+        await fsCrud.file.rename(node.id, newPath);
+        await refreshTree();
+
+        if (node.type === 'file' && activeFileId === node.id) {
+          closeFile(node.id);
+          openFile({ id: newPath, name: newName, type: 'file' });
+        }
+      } catch (error) {
+        console.error('[Explorer] Failed to rename file:', error);
+        window.alert('Failed to rename file.');
+      }
+    },
+    [folder, refreshTree, activeFileId, openFile, closeFile]
+  );
+
+  const handleDuplicateFile = useCallback(
+    async (node: FileNode) => {
+      if (!folder) return;
+      try {
+        if (node.type === 'file') {
+          const content = await fsCrud.file.read(node.id);
+          const nameParts = node.name.split('.');
+          const extension = nameParts.length > 1 ? '.' + nameParts.pop() : '';
+          const baseName = nameParts.join('.');
+
+          let duplicateName = `${baseName} copy${extension}`;
+          let counter = 1;
+
+          // Find all files in the same directory to check for duplicates
+          const normalizedNodeId = node.id.replace(/\\/g, '/');
+          const dirPath = normalizedNodeId.substring(
+            0,
+            normalizedNodeId.lastIndexOf('/')
+          );
+          let siblings: FileNode[] = [];
+          if (dirPath === normalizedNodeId || dirPath === '') {
+            // Root level
+            siblings = fileTree;
+          } else {
+            // Find the parent folder in the tree
+            const findInTree = (
+              nodes: FileNode[],
+              targetDir: string
+            ): FileNode[] => {
+              for (const n of nodes) {
+                if (n.type === 'folder' && n.id === targetDir) {
+                  return n.children || [];
+                }
+                if (n.type === 'folder' && n.children) {
+                  const result = findInTree(n.children, targetDir);
+                  if (result.length > 0) return result;
+                }
+              }
+              return [];
+            };
+            siblings = findInTree(fileTree, dirPath);
+          }
+
+          while (siblings.some((s) => s.name === duplicateName)) {
+            duplicateName = `${baseName} copy ${counter}${extension}`;
+            counter++;
+          }
+
+          const newPath =
+            dirPath === normalizedNodeId || dirPath === ''
+              ? duplicateName
+              : `${dirPath}/${duplicateName}`;
+          await fsCrud.file.create(newPath, content);
+          await refreshTree();
+          openFile({ id: newPath, name: duplicateName, type: 'file' });
+        }
+      } catch (error) {
+        console.error('[Explorer] Failed to duplicate file:', error);
+        window.alert('Failed to duplicate file.');
+      }
+    },
+    [folder, refreshTree, openFile, fileTree]
+  );
+
+  const handleRefreshTree = useCallback(async () => {
+    await refreshTree();
+  }, [refreshTree]);
+
+  const handleCollapseAll = useCallback(() => {
+    setCollapseSignal((s) => s + 1);
+  }, []);
+
   const handleContentChange = useCallback(
     (content: string) => {
       if (activeFileId) {
         updateFileContent(activeFileId, content);
+        // Debounced autosave: wait a short delay after typing stops, then persist
+        if (saveTimeoutRef.current) {
+          window.clearTimeout(saveTimeoutRef.current);
+        }
+        saveTimeoutRef.current = window.setTimeout(async () => {
+          try {
+            await fsCrud.file.update(activeFileId, content);
+          } catch (e) {
+            console.error('[Autosave] Failed to save file:', e);
+          }
+        }, 800);
       }
     },
     [activeFileId, updateFileContent]
   );
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const folderName =
     fileTree.length > 0 ? folder?.split(/[\\/]/).pop() || 'Vault' : 'Vault';
@@ -194,6 +415,14 @@ const Index = ({
           fileTree={fileTree}
           activeFileId={activeFileId}
           onFileSelect={handleFileSelect}
+          onCreateFile={handleCreateFile}
+          onCreateFolder={handleCreateFolder}
+          onDeleteFile={handleDeleteFile}
+          onDuplicateFile={handleDuplicateFile}
+          onRenameFile={handleRenameFile}
+          onRefreshTree={handleRefreshTree}
+          onCollapseAll={handleCollapseAll}
+          collapseSignal={collapseSignal}
         />
 
         {/* Editor area — elevated card */}

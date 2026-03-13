@@ -134,6 +134,7 @@ export default function MarkdownEditor({
         EditorView.updateListener.of((update) => {
           if (update.docChanged && onContentChangeRef.current) {
             onContentChangeRef.current(update.state.doc.toString());
+            console.log('live content', update.state.doc.toString());
           }
         }),
       ],
